@@ -1,4 +1,4 @@
 Pillow>=12.0.0
-pypotrace>=0.3
+potracer>=0.0.4
 numpy>=2.3.4
 pyserial>=3.5

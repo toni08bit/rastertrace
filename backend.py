@@ -240,7 +240,7 @@ def createPlan():
         draw.rectangle([0, 0, margin, height], fill=0)
         draw.rectangle([width - margin, 0, width, height], fill=0)
 
-        bitmap = potrace.Bitmap(numpy.array(new_img, dtype=numpy.uint8))
+        bitmap = potrace.Bitmap(numpy.array(new_img, dtype=numpy.bool))
 
         setPlanStatus("planned", "(4/7) Tracing...", "warn")
         trace = bitmap.trace()
@@ -258,6 +258,7 @@ def createPlan():
         setPlanStatus("planned", "Warning", "warn")
     
     except Exception as exception:
+        raise # TODO REMOVE ME
         plan_gcode = None
         plan_img = None
         setPlanStatus("planned", "Error", "error")
@@ -272,12 +273,13 @@ def potraceToBezier(path):
     bezier_curves = []
     
     for curve in path:
-        prev_point = curve.start_point
+        prev_point = _ptPoint_to_numpy(curve.start_point)
         
-        for segment in curve:
+        for segment in curve.segments:
+            end_point = _ptPoint_to_numpy(segment.end_point)
             if segment.is_corner:
                 # CornerSegment: force sharp turn
-                c = segment.c
+                c = _ptPoint_to_numpy(segment.c)
 
                 bezier_curves.append([
                     prev_point, prev_point, c, c
@@ -285,18 +287,21 @@ def potraceToBezier(path):
 
                 bezier_curves.append([
                     c, c,
-                    segment.end_point, segment.end_point
+                    end_point, end_point
                 ])
             else:
                 # BezierSegment: direct conversion
+                c1 = _ptPoint_to_numpy(segment.c1)
+                c2 = _ptPoint_to_numpy(segment.c2)
+
                 bezier_curves.append([
                     prev_point,
-                    segment.c1,
-                    segment.c2,
-                    segment.end_point
+                    c1,
+                    c2,
+                    end_point
                 ])
             
-            prev_point = segment.end_point
+            prev_point = end_point
     
     return bezier_curves
 
@@ -418,3 +423,6 @@ def seconds_to_string(seconds):
     m = (seconds % 3600) // 60
     s = seconds % 60
     return f"{h}h {m}m {s}s"
+
+def _ptPoint_to_numpy(ptPoint):
+    return numpy.array((ptPoint.x, ptPoint.y))

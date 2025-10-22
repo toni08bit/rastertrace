@@ -1,19 +1,20 @@
 import time
 import numpy
 import serial
-import potrace
 from tkinter import messagebox, filedialog
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
+
+import tracers
 
 # Config
 SERIAL_PORT = "/dev/ttyUSB0"
 SERIAL_BAUD_RATE = 115200
 SERIAL_TIMEOUT = 3
 PX_PER_MM = 8
-IMG_THRESHOLD = 127
 G0_FEEDRATE = 1200
 G1_FEEDRATE = 1000
 STEPS_PER_MM = 1
+TRACING_FUNC = tracers.tracePotracer
 
 BACKGROUND_COLORS = {
     "ok": "#217346",
@@ -200,7 +201,7 @@ def createPlan():
     global plan_img
     global plan_gcode
 
-    setPlanStatus("planned", "(1/7) Reading...", "warn")
+    setPlanStatus("planned", "(?) Reading...", "warn")
 
     try:
         bed_x = int(_ui_refs["app"].bed_x.get())
@@ -215,18 +216,17 @@ def createPlan():
             messagebox.showwarning("Warning", "No image selected!")
             raise SoftError()
 
-        new_img = Image.new("1", (bed_x * PX_PER_MM, bed_y * PX_PER_MM))
+        new_img = Image.new("RGB", (bed_x * PX_PER_MM, bed_y * PX_PER_MM), color=(255, 255, 255))
 
-        setPlanStatus("planned", "(2/7) Converting...", "warn")
+        setPlanStatus("planned", "(?) Converting...", "warn")
         converted_image = _ui_refs["app"].current_image.resize(
             (
                 int(img_w * PX_PER_MM),
                 int(img_h * PX_PER_MM)
             ),
             Image.Resampling.BICUBIC
-        ).convert("L").point(lambda x: 255 if x < IMG_THRESHOLD else 0, mode="1")
+        )
 
-        setPlanStatus("planned", "(3/7) Moving...", "warn")
         new_img.paste(converted_image, (
             int((img_x + bed_x / 2 - img_w / 2) * PX_PER_MM),
             int((img_y + bed_y / 2 - img_h / 2) * PX_PER_MM)
@@ -235,21 +235,20 @@ def createPlan():
         draw = ImageDraw.Draw(new_img)
         width, height = new_img.size
         margin = int(pen_safety)
-        draw.rectangle([0, 0, width, margin], fill=0)
-        draw.rectangle([0, height - margin, width, height], fill=0)
-        draw.rectangle([0, 0, margin, height], fill=0)
-        draw.rectangle([width - margin, 0, width, height], fill=0)
+        draw.rectangle([0, 0, width, margin], fill=(255, 255, 255))
+        draw.rectangle([0, height - margin, width, height], fill=(255, 255, 255))
+        draw.rectangle([0, 0, margin, height], fill=(255, 255, 255))
+        draw.rectangle([width - margin, 0, width, height], fill=(255, 255, 255))
 
-        bitmap = potrace.Bitmap(numpy.array(new_img, dtype=numpy.bool))
+        setPlanStatus("planned", "(?) Tracing...", "warn")
+        bezier = TRACING_FUNC(new_img)
+        setPlanStatus("planned", "(?) Minimizing...", "warn")
+        bezier = tracers.minimizeAir(bezier)
 
-        setPlanStatus("planned", "(4/7) Tracing...", "warn")
-        trace = bitmap.trace()
-
-        setPlanStatus("planned", "(5/7) Minimizing...", "warn")
-        bezier = minimizeAir(potraceToBezier(trace))
-        setPlanStatus("planned", "(6/7) Viewing...", "warn")
+        setPlanStatus("planned", "(?) Viewing...", "warn")
         plan_img = bezierToImg(bezier, new_img.size)
-        setPlanStatus("planned", "(7/7) Coding...", "warn")
+
+        setPlanStatus("planned", "(?) Coding...", "warn")
         plan_gcode = generateGcode(bezier, new_img.size)
     
     except SoftError:
@@ -258,7 +257,6 @@ def createPlan():
         setPlanStatus("planned", "Warning", "warn")
     
     except Exception as exception:
-        raise # TODO REMOVE ME
         plan_gcode = None
         plan_img = None
         setPlanStatus("planned", "Error", "error")
@@ -267,43 +265,6 @@ def createPlan():
     else:
         setPlanButton(0, "View Plan")
         setPlanStatus("planned", "Yes", "ok")
-
-
-def potraceToBezier(path):
-    bezier_curves = []
-    
-    for curve in path:
-        prev_point = _ptPoint_to_numpy(curve.start_point)
-        
-        for segment in curve.segments:
-            end_point = _ptPoint_to_numpy(segment.end_point)
-            if segment.is_corner:
-                # CornerSegment: force sharp turn
-                c = _ptPoint_to_numpy(segment.c)
-
-                bezier_curves.append([
-                    prev_point, prev_point, c, c
-                ])
-
-                bezier_curves.append([
-                    c, c,
-                    end_point, end_point
-                ])
-            else:
-                # BezierSegment: direct conversion
-                c1 = _ptPoint_to_numpy(segment.c1)
-                c2 = _ptPoint_to_numpy(segment.c2)
-
-                bezier_curves.append([
-                    prev_point,
-                    c1,
-                    c2,
-                    end_point
-                ])
-            
-            prev_point = end_point
-    
-    return bezier_curves
 
 def bezierToImg(bezier, bitmap_size):
     img = Image.new("1", bitmap_size, 1)
@@ -324,10 +285,6 @@ def bezierToImg(bezier, bitmap_size):
                 draw.line([points[i], points[i + 1]], fill=0, width=thickness_px)
     
     return img
-
-def minimizeAir(bezier):
-    # TODO: travelling salesman problem!!!
-    return bezier
 
 _gcode_draft = ""
 def generateGcode(plan_lines, bitmap_size):
@@ -423,6 +380,3 @@ def seconds_to_string(seconds):
     m = (seconds % 3600) // 60
     s = seconds % 60
     return f"{h}h {m}m {s}s"
-
-def _ptPoint_to_numpy(ptPoint):
-    return numpy.array((ptPoint.x, ptPoint.y))

@@ -22,7 +22,7 @@ pip  install  -r  requirements.txt
 - Replace `requirements.txt` with `lts-requirements.txt`, which installs older versions of the dependencies which have been tested together.
 
 ## Quick Start
-1. After installing your environment and the required dependencies, launch `python3 main.py`.
+1. After installing your environment and the required dependencies, enter the `src` directory and launch `python3 main.py`.
 
 3. Enter you machine specifications in the top-right **Configuration** box.
 

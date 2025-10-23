@@ -10,10 +10,10 @@ import svg.path as svgpath
 # Config
 POTRACE_IMG_THRESHOLD = 127
 POTRACE_INVERT = True
-VTRACER_INVERT = True
+VTRACER_INVERT = False
 VTRACER_FILTER_SPECKLE = 4
-VTRACER_COLOR_PRECISION = 6
-VTRACER_LAYER_DIFFERENCE = 16
+VTRACER_COLOR_PRECISION = 8
+VTRACER_LAYER_DIFFERENCE = 10
 VTRACER_PATH_PRECISION = 8
 
 def tracePotracer(img):
@@ -88,19 +88,31 @@ def traceVTracer(img):
         path_precision=VTRACER_PATH_PRECISION
     )
     xml_svg = cElementTree.fromstring(svg)
+
+    bezier_curves = []
     for element in xml_svg:
         if not element.tag.endswith("path"):
             continue
 
         path_d = element.get("d")
-        path_tf = element.get("transform")
+        path_tf = _vtTransform_to_numpy(element.get("transform"))
         path_fill = element.get("fill")
 
         svg_path = svgpath.parse_path(path_d)
-        print(svg_path) # TODO don't forget to offset with path_tf
+        for segment in svg_path:
+            if type(segment) != svgpath.CubicBezier:
+                continue
+
+            bezier_curves.append([
+                _spPoint_to_numpy(segment.start) + path_tf,
+                _spPoint_to_numpy(segment.control1) + path_tf,
+                _spPoint_to_numpy(segment.control2) + path_tf,
+                _spPoint_to_numpy(segment.end) + path_tf
+            ])
+        # print(svg_path) # TODO don't forget to offset with path_tf
 
 
-    raise NotImplementedError()
+    return bezier_curves
 
 
 
@@ -111,5 +123,12 @@ def minimizeAir(bezier):
 
 
 
-def _ptPoint_to_numpy(ptPoint):
+def _ptPoint_to_numpy(ptPoint): # potrace
     return numpy.array((ptPoint.x, ptPoint.y))
+
+def _spPoint_to_numpy(spPoint): # svg.path
+    return numpy.array((spPoint.real, spPoint.imag))
+
+def _vtTransform_to_numpy(spTransform): # vtracer
+    split_tf = spTransform[len("transform("):-len(")")].split(",")
+    return numpy.array((float(split_tf[0]), float(split_tf[1])))

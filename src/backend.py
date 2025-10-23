@@ -3,7 +3,7 @@ import traceback
 import numpy
 import serial
 from tkinter import messagebox, filedialog
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw
 
 import tracers
 
@@ -15,7 +15,7 @@ PX_PER_MM = 8
 G0_FEEDRATE = 1200
 G1_FEEDRATE = 1000
 STEPS_PER_MM = 1
-TRACING_FUNC = tracers.tracePotracer
+TRACING_FUNC = tracers.traceVTracer
 
 BACKGROUND_COLORS = {
     "ok": "#217346",
@@ -52,6 +52,9 @@ def _createPlanBtn():
         createPlan()
 
 def _connectSerialBtn():
+    messagebox.showerror("Serial Error", "Serial Connection is not supported in this version.")
+    raise NotImplementedError()
+
     global serial_con
 
     if serial_con and serial_con.is_open:
@@ -77,6 +80,8 @@ def _connectSerialBtn():
         setPlanStatus("serial", "Connected", "ok")
 
 def _beginMotionBtn():
+    raise NotImplementedError()
+
     global is_moving
 
     if is_moving:

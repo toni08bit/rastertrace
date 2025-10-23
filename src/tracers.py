@@ -1,12 +1,20 @@
 import numpy
+from xml.etree import cElementTree
 from PIL import ImageOps
 
 import potrace
+import vtracer
+import svg.path as svgpath
 
 
 # Config
 POTRACE_IMG_THRESHOLD = 127
 POTRACE_INVERT = True
+VTRACER_INVERT = True
+VTRACER_FILTER_SPECKLE = 4
+VTRACER_COLOR_PRECISION = 6
+VTRACER_LAYER_DIFFERENCE = 16
+VTRACER_PATH_PRECISION = 8
 
 def tracePotracer(img):
     """Classic but less reliable"""
@@ -55,7 +63,44 @@ def tracePotracer(img):
     return bezier_curves
 
 def traceVTracer(img):
-    pass
+    """"""
+
+    new_img = img.convert("L")
+
+    if VTRACER_INVERT:
+        new_img = ImageOps.invert(new_img)
+    
+    new_img = new_img.convert("RGBA")
+
+    pixels: list[tuple[int, int, int, int]] = list(new_img.getdata())
+    svg = vtracer.convert_pixels_to_svg(
+        rgba_pixels=pixels,
+        size=new_img.size,
+        colormode="color",
+        hierarchical="cutout",
+        mode="spline",
+        corner_threshold=60,
+        length_threshold=4.0,
+        max_iterations=10,
+        splice_threshold=45,
+        color_precision=VTRACER_COLOR_PRECISION,
+        layer_difference=VTRACER_LAYER_DIFFERENCE,
+        path_precision=VTRACER_PATH_PRECISION
+    )
+    xml_svg = cElementTree.fromstring(svg)
+    for element in xml_svg:
+        if not element.tag.endswith("path"):
+            continue
+
+        path_d = element.get("d")
+        path_tf = element.get("transform")
+        path_fill = element.get("fill")
+
+        svg_path = svgpath.parse_path(path_d)
+        print(svg_path) # TODO don't forget to offset with path_tf
+
+
+    raise NotImplementedError()
 
 
 

@@ -1,4 +1,5 @@
 import time
+import traceback
 import numpy
 import serial
 from tkinter import messagebox, filedialog
@@ -64,6 +65,7 @@ def _connectSerialBtn():
         except Exception as exception:
             setPlanStatus("serial", "Error", "error")
             messagebox.showerror("Serial Error", f"Unexpected error: {exception}")
+            traceback.print_exc()
             return
         
         serial_con.write("G6 P100")
@@ -261,6 +263,7 @@ def createPlan():
         plan_img = None
         setPlanStatus("planned", "Error", "error")
         messagebox.showerror("Error", f"Unexpected error: {exception.__class__.__name__}")
+        traceback.print_exc()
     
     else:
         setPlanButton(0, "View Plan")
